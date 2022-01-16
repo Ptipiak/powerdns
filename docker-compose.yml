@@ -1,0 +1,77 @@
+version: '3'
+
+services:
+  powerdns-authority:
+    image: powerdns/pdns-auth-45
+    container_name: powerdns-authority
+    environment:
+      - PDNS_AUTH_API_KEY=my-very-secret-key
+    networks:
+      powerdns-network:
+        ipv4_address: 172.23.0.3
+    ports:
+      - 1053:1053
+    volumes:
+      - ./powerdns-conf-authority/:/etc/powerdns
+    depends_on:
+      - postgres
+
+  powerdns-recursor:
+    image: powerdns/pdns-recursor-45
+    container_name: powerdns-recursor
+    environment:
+      - PDNS_RECURSOR_API_KEY=my-very-secret-key
+    networks:
+      powerdns-network:
+        ipv4_address: 172.23.0.4
+    ports:
+      - 53:53
+    volumes:
+      - ./powerdns-conf-recursor/:/etc/powerdns
+      # - ./data:/var/lib/powerdns/pdns.sqlite3
+    depends_on:
+      - postgres
+      - powerdns-authority
+
+  powerdns-admin:
+    image: ngoduykhanh/powerdns-admin:latest
+    container_name: powerdns-admin
+    environment:
+      - SECRET_KEY=8lrav93PQdYhsncr+j/xan0SsX9TQBprKYvP4qwTZ6c=
+      - SQLALCHEMY_DATABASE_URI=postgresql://powerdns:powerdns@postgres-powerdns/powerdns
+      - PORT=9191
+    networks:
+      powerdns-network:
+        ipv4_address: 172.23.0.5
+    ports:
+      - 80:80
+    volumes:
+      - ./data-admin:/data
+    depends_on:
+      - postgres
+      - powerdns-authority
+      - powerdns-recursor
+
+  postgres:
+    image: postgres
+    container_name: postgres-powerdns
+    networks:
+      powerdns-network:
+        ipv4_address: 172.23.0.2
+    environment:
+      - POSTGRES_USER=powerdns
+      - POSTGRES_DB=powerdns
+      - POSTGRES_PASSWORD=powerdns
+    volumes:
+      - ./database-conf/:/docker-entrypoint-initdb.d
+      - ./database:/var/lib/postgresql/data
+
+networks:
+  powerdns-network:
+    name: powerdns-network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.23.0.0/24
+          gateway: 172.23.0.1
